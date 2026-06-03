@@ -581,6 +581,7 @@
       const res = await fetch('./vocab.json');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       vocab = await res.json();
+      buildIndexes();
       document.getElementById('translate-btn').disabled = false;
       document.getElementById('loading-bar').style.display = 'none';
       buildLegend();
@@ -589,6 +590,78 @@
       showToast('⚠ Wörterbuch konnte nicht geladen werden.');
       document.getElementById('loading-bar').style.display = 'none';
     }
+  }
+
+  // ── Lookup indexes ───────────────────────────────────────
+  // Built once after the vocabulary loads. Sets give O(1) membership tests on
+  // the large word lists; lowerToKey/lowerRank back the fuzzy spell-matcher.
+  let verbSet = null, ignoreSet = null, nounSet = null;
+  let lowerToKey = null, lowerRank = null;
+
+  function buildIndexes() {
+    verbSet   = new Set(vocab.verbs);
+    ignoreSet = new Set(vocab.ignore);
+    nounSet   = new Set(vocab.nouns);
+    lowerToKey = new Map();
+    lowerRank  = new Map();
+    let i = 0;
+    for (const key in vocab.dictionary) {
+      const lk = key.toLowerCase();
+      if (!lowerToKey.has(lk)) { lowerToKey.set(lk, key); lowerRank.set(lk, i); }
+      i++;
+    }
+  }
+
+  // ── Fuzzy typo tolerance ─────────────────────────────────
+  // Lets a word with a few spelling mistakes still resolve. On a dictionary
+  // miss we generate all edit-distance-1 variants of the token (delete /
+  // transpose / replace / insert) and, if none hit, edit-distance-2. Among the
+  // matches we pick the one with the lowest insertion rank (≈ most common word).
+  const FUZZY_ALPHABET = 'abcdefghijklmnopqrstuvwxyzäöüß';
+  const FUZZY_MIN = 4, FUZZY_MAX = 18;
+
+  function editsOne(word) {
+    const out = new Set();
+    const n = word.length;
+    for (let i = 0; i <= n; i++) {
+      const a = word.slice(0, i), b = word.slice(i);
+      if (b) out.add(a + b.slice(1));                          // deletion
+      if (b.length > 1) out.add(a + b[1] + b[0] + b.slice(2)); // transposition
+      for (const c of FUZZY_ALPHABET) {
+        if (b) out.add(a + c + b.slice(1));                    // replacement
+        out.add(a + c + b);                                    // insertion
+      }
+    }
+    return out;
+  }
+
+  // Among candidate corrections, prefer the one closest in length to the input
+  // (real typos rarely change length much), and break ties by insertion rank
+  // (≈ word commonness). `acc` carries the running best across calls.
+  function scanMatches(candidates, srcLen, acc) {
+    for (const cand of candidates) {
+      const key = lowerToKey.get(cand);
+      if (key === undefined) continue;
+      const lenDiff = Math.abs(cand.length - srcLen);
+      const rank = lowerRank.get(cand);
+      if (lenDiff < acc.lenDiff || (lenDiff === acc.lenDiff && rank < acc.rank)) {
+        acc.lenDiff = lenDiff; acc.rank = rank; acc.key = key;
+      }
+    }
+    return acc;
+  }
+
+  function findFuzzy(lower) {
+    if (lower.length < FUZZY_MIN || lower.length > FUZZY_MAX) return null;
+    if (!/^[a-zäöüß]+$/.test(lower)) return null;
+    const e1 = editsOne(lower);
+    const acc = { key: null, lenDiff: Infinity, rank: Infinity };
+    scanMatches(e1, lower.length, acc);
+    if (acc.key) return acc.key;                  // distance-1 match wins
+    for (const cand of e1) {                       // distance 2 (rare; only on miss)
+      scanMatches(editsOne(cand), lower.length, acc);
+    }
+    return acc.key;
   }
 
   // ── Legend builder ────────────────────────────────
@@ -644,7 +717,7 @@
       if (token.length <= ending.length + 1) continue;
       if (!token.endsWith(ending)) continue;
       const base = token.slice(0, -ending.length);
-      if (vocab.dictionary[base] && vocab.nouns.includes(base)) {
+      if (vocab.dictionary[base] && nounSet.has(base)) {
         const suffix = vocab.rules.plural_suffix.replace(/^-/, ''); // strip leading '-'
         return vocab.dictionary[base] + suffix;
       }
@@ -656,14 +729,14 @@
   // Returns:
   //   null          → article (ignore + skip following whitespace)
   //   string        → translated (or original if unknown)
-  function translateToken(token, tense) {
+  function translateToken(token, tense, allowFuzzy = true) {
     const lower = token.toLowerCase();
 
     // ① Article → remove
-    if (vocab.ignore.includes(lower)) return null;
+    if (ignoreSet.has(lower)) return null;
 
     // ② Verb infinitive → translate + optional tense prefix
-    if (vocab.verbs.includes(lower)) {
+    if (verbSet.has(lower)) {
       const av = vocab.dictionary[lower] || token;
       if (tense === 'past')   return vocab.rules.past_prefix   + av;
       if (tense === 'future') return vocab.rules.future_prefix + av;
@@ -680,7 +753,15 @@
     // ④ Everything else → lowercase dictionary lookup
     if (vocab.dictionary[lower]) return vocab.dictionary[lower];
 
-    // ⑤ Unknown → keep original
+    // ⑤ Unknown → tolerate a few spelling mistakes, then re-translate
+    if (allowFuzzy) {
+      const corrected = findFuzzy(lower);
+      if (corrected && corrected.toLowerCase() !== lower) {
+        return translateToken(corrected, tense, false);
+      }
+    }
+
+    // ⑥ Still unknown → keep original
     return token;
   }
 
