@@ -1,249 +1,809 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Avelan Translator</title>
-    <style>
-        :root {
-            --bg: #121212;
-            --card: #1e1e1e;
-            --text: #e0e0e0;
-            --accent: #bb86fc;
-            --border: #333;
-            --input-bg: #252525;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Avelan Übersetzer — Deutsch → Avelan</title>
+  <style>
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-        body {
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-        }
+    :root {
+      --bg:           #121212;
+      --surface:      #1e1e1e;
+      --surface-alt:  #252525;
+      --border:       #333;
+      --border-focus: #00adb5;
+      --accent:       #00adb5;
+      --accent-hover: #00c9d4;
+      --accent-glow:  rgba(0, 173, 181, 0.22);
+      --text:         #e0e0e0;
+      --text-muted:   #999;
+      --text-dim:     #555;
+      --past-color:   #ff6b6b;
+      --past-bg:      rgba(255, 107, 107, 0.1);
+      --past-border:  rgba(255, 107, 107, 0.3);
+      --future-color: #5ba4f5;
+      --future-bg:    rgba(91, 164, 245, 0.1);
+      --future-border:rgba(91, 164, 245, 0.3);
+      --radius:       12px;
+      --radius-sm:    7px;
+    }
 
-        .container {
-            width: 90%;
-            max-width: 1100px;
-            background: var(--card);
-            padding: 2.5rem;
-            border-radius: 16px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-            border: 1px solid var(--border);
-        }
+    html { scroll-behavior: smooth; }
 
-        header {
-            text-align: center;
-            margin-bottom: 2.5rem;
-        }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
 
-        h1 {
-            font-weight: 200;
-            letter-spacing: 6px;
-            color: var(--accent);
-            margin: 0;
-            text-transform: uppercase;
-        }
+    /* ─── Header ─────────────────────────── */
+    header {
+      padding: 26px 24px 20px;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #161616 0%, transparent 100%);
+    }
 
-        .translator-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 2rem;
-        }
+    .header-inner {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+    }
 
-        @media (max-width: 768px) {
-            .translator-grid { grid-template-columns: 1fr; }
-        }
+    .pulse-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--accent), 0 0 22px var(--accent-glow);
+      animation: pulse 2.4s ease-in-out infinite;
+    }
 
-        .box { display: flex; flex-direction: column; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1;   box-shadow: 0 0 10px var(--accent); }
+      50%       { opacity: 0.5; box-shadow: 0 0 20px var(--accent), 0 0 40px var(--accent-glow); }
+    }
 
-        label {
-            font-size: 0.75rem;
-            color: #888;
-            margin-bottom: 0.6rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-        }
+    header h1 {
+      font-size: 1.85rem;
+      font-weight: 800;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
 
-        textarea {
-            width: 100%;
-            height: 280px;
-            background: var(--input-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.2rem;
-            color: #fff;
-            font-size: 1.15rem;
-            line-height: 1.6;
-            resize: none;
-            outline: none;
-            transition: border-color 0.3s, box-shadow 0.3s;
-            box-sizing: border-box;
-        }
+    header p {
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      letter-spacing: 1.5px;
+      margin-top: 6px;
+    }
 
-        textarea:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 15px rgba(187, 134, 252, 0.1);
-        }
+    /* ─── Main ──────────────────────────── */
+    main {
+      flex: 1;
+      padding: 30px 24px 40px;
+      max-width: 1280px;
+      margin: 0 auto;
+      width: 100%;
+    }
 
-        .controls {
-            grid-column: 1 / -1;
-            display: flex;
-            justify-content: center;
-            margin-top: 2rem;
-        }
+    /* ─── Translator Grid ─────────────── */
+    .translator-grid {
+      display: grid;
+      grid-template-columns: 1fr 110px 1fr;
+      gap: 18px;
+      align-items: start;
+    }
 
-        button {
-            background: var(--accent);
-            color: #000;
-            border: none;
-            padding: 1.1rem 4rem;
-            font-size: 1rem;
-            font-weight: 700;
-            border-radius: 50px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-        }
+    /* ─── Panel ─────────────────────────── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: border-color 0.25s, box-shadow 0.25s;
+    }
 
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(187, 134, 252, 0.3);
-            filter: brightness(1.1);
-        }
+    .panel:focus-within {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 1px var(--border-focus), 0 0 24px var(--accent-glow);
+    }
 
-        button:active { transform: translateY(0); }
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--surface-alt);
+      border-bottom: 1px solid var(--border);
+    }
 
-        .status {
-            text-align: center;
-            font-size: 0.75rem;
-            color: #666;
-            margin-top: 1.5rem;
-        }
-    </style>
+    .lang-tag {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .lang-flag { font-size: 1.05rem; }
+
+    .lang-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .btn-icon {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px 10px;
+      font-size: 0.72rem;
+      letter-spacing: 0.5px;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .btn-icon:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-glow);
+    }
+
+    textarea {
+      display: block;
+      width: 100%;
+      min-height: 280px;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 1.05rem;
+      line-height: 1.75;
+      padding: 18px 18px 14px;
+      resize: vertical;
+      outline: none;
+      font-family: inherit;
+    }
+
+    textarea::placeholder { color: var(--text-dim); }
+    textarea[readonly]    { cursor: default; color: var(--accent); font-style: italic; }
+
+    .panel-footer {
+      padding: 5px 14px;
+      background: var(--surface-alt);
+      border-top: 1px solid var(--border);
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ─── Center Controls ─────────────── */
+    .controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding-top: 48px;
+    }
+
+    .arrow-sep {
+      font-size: 1.3rem;
+      color: var(--text-dim);
+      transition: color 0.2s;
+    }
+
+    #translate-btn {
+      width: 100%;
+      padding: 12px 10px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 50px;
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    #translate-btn:hover:not(:disabled) {
+      background: var(--accent-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 22px var(--accent-glow);
+    }
+
+    #translate-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    /* ─── Tense Badge ───────────────── */
+    .tense-badge {
+      width: 100%;
+      text-align: center;
+      padding: 5px 10px;
+      border-radius: 20px;
+      font-size: 0.64rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      border: 1px solid;
+      transition: all 0.3s;
+    }
+
+    .tense-neutral {
+      background: var(--surface-alt);
+      color: var(--text-dim);
+      border-color: var(--border);
+    }
+
+    .tense-past {
+      background: var(--past-bg);
+      color: var(--past-color);
+      border-color: var(--past-border);
+    }
+
+    .tense-future {
+      background: var(--future-bg);
+      color: var(--future-color);
+      border-color: var(--future-border);
+    }
+
+    /* ─── Keyboard hint ───────────────── */
+    .kbd-hint {
+      font-size: 0.62rem;
+      color: var(--text-dim);
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    kbd {
+      display: inline-block;
+      padding: 1px 5px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 0.6rem;
+      background: var(--surface-alt);
+    }
+
+    /* ─── Examples ────────────────── */
+    .examples-section {
+      margin-top: 34px;
+    }
+
+    .section-title {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+    }
+
+    .examples-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .example-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 6px 14px 6px 8px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+      user-select: none;
+    }
+
+    .example-chip:hover {
+      border-color: var(--accent);
+      color: var(--text);
+      background: var(--accent-glow);
+    }
+
+    .chip-tag {
+      font-size: 0.58rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 10px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+
+    .chip-tag.past    { background: var(--past-bg);    color: var(--past-color); }
+    .chip-tag.future  { background: var(--future-bg);  color: var(--future-color); }
+    .chip-tag.neutral { background: var(--surface-alt); color: var(--text-dim); }
+
+    /* ─── Legend ────────────────────── */
+    .legend-section {
+      margin-top: 34px;
+    }
+
+    .legend-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 8px;
+    }
+
+    .legend-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+    }
+
+    .legend-de  { color: var(--text-muted); }
+    .legend-arrow { color: var(--text-dim); font-size: 0.7rem; }
+    .legend-av  { color: var(--accent); font-weight: 600; }
+
+    /* ─── Footer ────────────────────── */
+    footer {
+      text-align: center;
+      padding: 14px;
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      border-top: 1px solid var(--border);
+    }
+
+    footer em { color: var(--accent); font-style: normal; }
+
+    /* ─── Toast ────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 22px;
+      right: 22px;
+      background: var(--surface-alt);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-sm);
+      padding: 9px 16px;
+      font-size: 0.82rem;
+      color: var(--accent);
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.28s, transform 0.28s;
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ─── Loading state ───────────────── */
+    #loading-bar {
+      height: 2px;
+      background: linear-gradient(90deg, var(--bg), var(--accent), var(--bg));
+      background-size: 200% 100%;
+      animation: shimmer 1.4s linear infinite;
+    }
+
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* ─── Responsive ─────────────────── */
+    @media (max-width: 780px) {
+      .translator-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+
+      .controls {
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding-top: 0;
+        justify-content: center;
+      }
+
+      .arrow-sep { transform: rotate(90deg); }
+
+      #translate-btn { flex: 1; min-width: 120px; }
+
+      .tense-badge, .kbd-hint { display: none; }
+
+      .legend-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      }
+    }
+  </style>
 </head>
 <body>
 
-<div class="container">
-    <header>
-        <h1>Avelan</h1>
-        <div class="status" id="status">Lade System...</div>
-    </header>
-    
-    <div class="translator-grid">
-        <div class="box">
-            <label>Deutsch</label>
-            <textarea id="input" placeholder="Text eingeben..."></textarea>
+<div id="loading-bar"></div>
+
+<header>
+  <div class="header-inner">
+    <div class="pulse-dot"></div>
+    <h1>Avelan Übersetzer</h1>
+    <div class="pulse-dot"></div>
+  </div>
+  <p>Deutsch → Avelan &nbsp;·&nbsp; Konstruierte Sprache &nbsp;·&nbsp; 218 Wörter</p>
+</header>
+
+<main>
+
+  <!-- ── Translator ── -->
+  <div class="translator-grid">
+
+    <!-- German input panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="lang-tag">
+          <span class="lang-flag">🇩🇪</span>
+          <span class="lang-label">Deutsch</span>
         </div>
-        <div class="box">
-            <label>Avelan</label>
-            <textarea id="output" readonly placeholder="Übersetzung erscheint hier..."></textarea>
-        </div>
-        <div class="controls">
-            <button onclick="translateText()">Übersetzen</button>
-        </div>
+        <button class="btn-icon" onclick="clearAll()">✕&nbsp;Leeren</button>
+      </div>
+      <textarea
+        id="german-input"
+        placeholder="Deutschen Text hier eingeben…"
+        spellcheck="true"
+        oninput="onInputChange()"
+        onkeydown="handleKeydown(event)"
+      ></textarea>
+      <div class="panel-footer">
+        <span id="in-word-count">0 Wörter</span>
+      </div>
     </div>
-</div>
+
+    <!-- Center controls -->
+    <div class="controls">
+      <div class="arrow-sep">→</div>
+
+      <button id="translate-btn" onclick="translateText()" disabled>
+        Übersetzen
+      </button>
+
+      <div id="tense-badge" class="tense-badge tense-neutral">Neutral</div>
+
+      <div class="kbd-hint">
+        <kbd>Ctrl</kbd>+<kbd>↵</kbd>
+      </div>
+    </div>
+
+    <!-- Avelan output panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="lang-tag">
+          <span class="lang-flag">🌐</span>
+          <span class="lang-label">Avelan</span>
+        </div>
+        <button class="btn-icon" onclick="copyOutput()">⎘&nbsp;Kopieren</button>
+      </div>
+      <textarea
+        id="avelan-output"
+        placeholder="Avelan-Übersetzung erscheint hier…"
+        readonly
+      ></textarea>
+      <div class="panel-footer">
+        <span id="out-word-count">0 Wörter</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Example sentences ── -->
+  <div class="examples-section">
+    <div class="section-title">▸ Beispielsätze</div>
+    <div class="examples-list">
+      <div class="example-chip" onclick="useExample(this)">
+        <span class="chip-tag future">Zukunft</span>
+        <span>Ich werde morgen in die Stadt gehen</span>
+      </div>
+      <div class="example-chip" onclick="useExample(this)">
+        <span class="chip-tag past">Vergangen.</span>
+        <span>Wir haben gestern das Buch lesen</span>
+      </div>
+      <div class="example-chip" onclick="useExample(this)">
+        <span class="chip-tag neutral">Neutral</span>
+        <span>Der Hund ist groß und stark</span>
+      </div>
+      <div class="example-chip" onclick="useExample(this)">
+        <span class="chip-tag future">Zukunft</span>
+        <span>Du wirst bald Deutsch lernen</span>
+      </div>
+      <div class="example-chip" onclick="useExample(this)">
+        <span class="chip-tag past">Vergangen.</span>
+        <span>Das Kind hatte gestern schlafen</span>
+      </div>
+      <div class="example-chip" onclick="useExample(this)">
+        <span class="chip-tag neutral">Neutral</span>
+        <span>Wer kann mir helfen</span>
+      </div>
+      <div class="example-chip" onclick="useExample(this)">
+        <span class="chip-tag future">Zukunft</span>
+        <span>Wir werden bald reisen und die Welt sehen</span>
+      </div>
+      <div class="example-chip" onclick="useExample(this)">
+        <span class="chip-tag past">Vergangen.</span>
+        <span>Sie hatte damals sehr gut singen</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Vocabulary legend ── -->
+  <div class="legend-section">
+    <div class="section-title">▸ Kern-Vokabular (Auswahl)</div>
+    <div class="legend-grid" id="legend-grid">
+      <!-- Populated by JS -->
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  Avelan Übersetzer &nbsp;—&nbsp; Eine <em>konstruierte Kunstsprache</em> &nbsp;·&nbsp;
+  Artikel werden gefiltert &nbsp;·&nbsp; Verben erhalten Tempus-Präfixe <em>ba-</em> / <em>fi-</em>
+</footer>
+
+<div id="toast"></div>
 
 <script>
-    let config = null;
+  // ── State ────────────────────────────────────────────────────
+  let vocab = null;
 
-    async function init() {
-        try {
-            const response = await fetch('vocab.json');
-            config = await response.json();
-            document.getElementById('status').innerText = 'System bereit | ' + Object.keys(config.dictionary).length + ' Wörter geladen';
-        } catch (e) {
-            document.getElementById('status').innerText = 'Fehler beim Laden der vocab.json';
-            console.error(e);
-        }
+  // ── Boot ─────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    loadVocab();
+  });
+
+  async function loadVocab() {
+    try {
+      const res = await fetch('./vocab.json');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      vocab = await res.json();
+      document.getElementById('translate-btn').disabled = false;
+      document.getElementById('loading-bar').style.display = 'none';
+      buildLegend();
+    } catch (err) {
+      console.error('Vocab load error:', err);
+      showToast('⚠ Wörterbuch konnte nicht geladen werden.');
+      document.getElementById('loading-bar').style.display = 'none';
+    }
+  }
+
+  // ── Legend builder ────────────────────────────────
+  const LEGEND_SAMPLE = [
+    'ich','du','er','wir','sein','haben','gehen','lieben',
+    'Haus','Welt','Hund','Freund','gut','schön','nicht','und',
+    'morgen','gestern','wer','für'
+  ];
+
+  function buildLegend() {
+    const grid = document.getElementById('legend-grid');
+    LEGEND_SAMPLE.forEach(de => {
+      const av = vocab.dictionary[de];
+      if (!av) return;
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML =
+        `<span class="legend-de">${de}</span>` +
+        `<span class="legend-arrow">→</span>` +
+        `<span class="legend-av">${av}</span>`;
+      grid.appendChild(item);
+    });
+  }
+
+  // ── Tokenizer ────────────────────────────────────────────
+  // Splits text into runs of German letters vs. everything else (punctuation, spaces).
+  const LETTER_RE = /[a-zA-ZäöüÄÖÜß]+|[^a-zA-ZäöüÄÖÜß]+/g;
+
+  function tokenize(text) {
+    return text.match(LETTER_RE) || [];
+  }
+
+  // ── Tense detection ────────────────────────────────────
+  // Scans all word tokens in the sentence; first hit wins.
+  function detectTense(text) {
+    const words = text.toLowerCase().match(/[a-zäöüß]+/g) || [];
+    for (const w of words) {
+      if (vocab.rules.indicators.past.includes(w))   return 'past';
+      if (vocab.rules.indicators.future.includes(w)) return 'future';
+    }
+    return 'neutral';
+  }
+
+  // ── Plural heuristic ─────────────────────────────────────
+  // For a capitalized token: strip common German plural endings, check if the
+  // resulting base is a known noun in the dictionary. If so → plural.
+  // Returns the Avelan translation with the plural suffix, or null.
+  const PLURAL_ENDINGS = ['en', 'er', 'e', 'n', 's'];
+
+  function tryPlural(token) {
+    if (!token || !/[A-ZÄÖÜ]/.test(token[0])) return null;
+    for (const ending of PLURAL_ENDINGS) {
+      if (token.length <= ending.length + 1) continue;
+      if (!token.endsWith(ending)) continue;
+      const base = token.slice(0, -ending.length);
+      if (vocab.dictionary[base] && vocab.nouns.includes(base)) {
+        const suffix = vocab.rules.plural_suffix.replace(/^-/, ''); // strip leading '-'
+        return vocab.dictionary[base] + suffix;
+      }
+    }
+    return null;
+  }
+
+  // ── Single-token translation ─────────────────────────────
+  // Returns:
+  //   null          → article (ignore + skip following whitespace)
+  //   string        → translated (or original if unknown)
+  function translateToken(token, tense) {
+    const lower = token.toLowerCase();
+
+    // ① Article → remove
+    if (vocab.ignore.includes(lower)) return null;
+
+    // ② Verb infinitive → translate + optional tense prefix
+    if (vocab.verbs.includes(lower)) {
+      const av = vocab.dictionary[lower] || token;
+      if (tense === 'past')   return vocab.rules.past_prefix   + av;
+      if (tense === 'future') return vocab.rules.future_prefix + av;
+      return av;
     }
 
-    function translateText() {
-        if (!config) return;
-        
-        const input = document.getElementById('input').value.toLowerCase();
-        const tokens = input.match(/\w+|[^\w\s]/g);
-        if (!tokens) {
-            document.getElementById('output').value = "";
-            return;
-        }
-
-        // Globaler Check für Zeitformen im Kontext
-        let sentencePast = config.signals.past.some(sig => tokens.includes(sig));
-        let sentenceFuture = config.signals.future.some(sig => tokens.includes(sig));
-
-        let translated = [];
-
-        for (let i = 0; i < tokens.length; i++) {
-            let token = tokens[i];
-
-            // Satzzeichen erhalten
-            if (/^[^\w\s]$/.test(token)) {
-                translated.push(token);
-                continue;
-            }
-
-            // Artikel ignorieren
-            if (config.rules.ignore_articles.includes(token)) continue;
-
-            // Signalwörter ignorieren (sie haben ihren Zweck erfüllt)
-            if (config.signals.past.includes(token) || config.signals.future.includes(token)) continue;
-
-            let root = token;
-            let isPlural = false;
-
-            // Plural-Detektion (Heuristik für Deutsch)
-            if (token.length > 3) {
-                if (token.endsWith('en') || token.endsWith('er') || token.endsWith('e')) {
-                    // Prüfen ob Stamm ohne Endung im Dict ist
-                    let possibleStems = [token.slice(0, -2), token.slice(0, -1)];
-                    for (let s of possibleStems) {
-                        if (config.dictionary[s] && config.dictionary[s].t === 'n') {
-                            root = s;
-                            isPlural = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            let entry = config.dictionary[root];
-            if (entry) {
-                let word = entry.v;
-
-                // Verben: Zeitformen anwenden
-                if (entry.t === 'v') {
-                    if (sentencePast) word = config.rules.past_prefix + word;
-                    else if (sentenceFuture) word = config.rules.future_prefix + word;
-                }
-
-                // Nomen: Plural anwenden
-                if (isPlural && entry.t === 'n') {
-                    word += config.rules.plural_suffix;
-                }
-
-                translated.push(word);
-            } else {
-                // Unbekanntes Wort bleibt stehen
-                translated.push(token);
-            }
-        }
-
-        // Leerzeichen korrigieren
-        let output = translated.join(' ')
-            .replace(/\s([,.!?;:])/g, '$1')
-            .replace(/^\w/, c => c.toUpperCase());
-
-        document.getElementById('output').value = output;
+    // ③ Capitalized word → noun path
+    if (/[A-ZÄÖÜ]/.test(token[0])) {
+      if (vocab.dictionary[token])  return vocab.dictionary[token];   // singular
+      const plural = tryPlural(token);
+      if (plural) return plural;                                        // plural
     }
 
-    window.onload = init;
+    // ④ Everything else → lowercase dictionary lookup
+    if (vocab.dictionary[lower]) return vocab.dictionary[lower];
+
+    // ⑤ Unknown → keep original
+    return token;
+  }
+
+  // ── Main translation ─────────────────────────────────────
+  function translateText() {
+    if (!vocab) return;
+
+    const input = document.getElementById('german-input').value;
+    if (!input.trim()) {
+      document.getElementById('avelan-output').value = '';
+      updateOutCount('');
+      return;
+    }
+
+    // Detect tense from full sentence
+    const tense = detectTense(input);
+    updateTenseBadge(tense);
+
+    const tokens = tokenize(input);
+    const out = [];
+    let skipNextWhitespace = false;
+
+    for (const token of tokens) {
+      const isLetters = /[a-zA-ZäöüÄÖÜß]/.test(token);
+
+      if (!isLetters) {
+        // Non-letter run: spaces / punctuation
+        if (skipNextWhitespace && /^\s+$/.test(token)) {
+          // Drop whitespace that directly follows a removed article
+          skipNextWhitespace = false;
+          continue;
+        }
+        skipNextWhitespace = false;
+        out.push(token);
+        continue;
+      }
+
+      skipNextWhitespace = false;
+      const result = translateToken(token, tense);
+
+      if (result === null) {
+        // Article removed; tell the loop to swallow the next whitespace
+        skipNextWhitespace = true;
+        continue;
+      }
+
+      out.push(result);
+    }
+
+    const translated = out.join('').replace(/\s{2,}/g, ' ').trim();
+    document.getElementById('avelan-output').value = translated;
+    updateOutCount(translated);
+  }
+
+  // ── UI helpers ───────────────────────────────────────
+  function updateTenseBadge(tense) {
+    const badge = document.getElementById('tense-badge');
+    badge.className = `tense-badge tense-${tense}`;
+    const map = { neutral: 'Neutral', past: 'Vergangenheit', future: 'Zukunft' };
+    badge.textContent = map[tense];
+  }
+
+  function wordCount(text) {
+    return text.trim() ? text.trim().split(/\s+/).length : 0;
+  }
+
+  function onInputChange() {
+    const txt = document.getElementById('german-input').value;
+    const n   = wordCount(txt);
+    document.getElementById('in-word-count').textContent =
+      n + ' Wort' + (n !== 1 ? 'e' : '');
+  }
+
+  function updateOutCount(txt) {
+    const n = wordCount(txt);
+    document.getElementById('out-word-count').textContent =
+      n + ' Wort' + (n !== 1 ? 'e' : '');
+  }
+
+  function clearAll() {
+    document.getElementById('german-input').value  = '';
+    document.getElementById('avelan-output').value = '';
+    onInputChange();
+    updateOutCount('');
+    updateTenseBadge('neutral');
+    document.getElementById('german-input').focus();
+  }
+
+  async function copyOutput() {
+    const txt = document.getElementById('avelan-output').value;
+    if (!txt) { showToast('⚠ Nichts zum Kopieren.'); return; }
+    try {
+      await navigator.clipboard.writeText(txt);
+      showToast('✓ In die Zwischenablage kopiert');
+    } catch {
+      showToast('⚠ Kopieren fehlgeschlagen');
+    }
+  }
+
+  function useExample(chip) {
+    // Clone, remove badge span, read clean text
+    const clone = chip.cloneNode(true);
+    clone.querySelector('.chip-tag')?.remove();
+    const txt = clone.textContent.trim();
+    document.getElementById('german-input').value = txt;
+    onInputChange();
+    translateText();
+  }
+
+  function handleKeydown(e) {
+    // Ctrl+Enter or Cmd+Enter → translate
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      translateText();
+    }
+  }
+
+  function showToast(msg) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2600);
+  }
 </script>
-
 </body>
 </html>
