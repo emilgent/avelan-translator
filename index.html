@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avelan Translator</title>
+    <style>
+        :root {
+            --bg: #121212;
+            --card: #1e1e1e;
+            --text: #e0e0e0;
+            --accent: #bb86fc;
+            --border: #333;
+            --input-bg: #252525;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 1100px;
+            background: var(--card);
+            padding: 2.5rem;
+            border-radius: 16px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            border: 1px solid var(--border);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+
+        h1 {
+            font-weight: 200;
+            letter-spacing: 6px;
+            color: var(--accent);
+            margin: 0;
+            text-transform: uppercase;
+        }
+
+        .translator-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .translator-grid { grid-template-columns: 1fr; }
+        }
+
+        .box { display: flex; flex-direction: column; }
+
+        label {
+            font-size: 0.75rem;
+            color: #888;
+            margin-bottom: 0.6rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 280px;
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.2rem;
+            color: #fff;
+            font-size: 1.15rem;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            box-sizing: border-box;
+        }
+
+        textarea:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 15px rgba(187, 134, 252, 0.1);
+        }
+
+        .controls {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        button {
+            background: var(--accent);
+            color: #000;
+            border: none;
+            padding: 1.1rem 4rem;
+            font-size: 1rem;
+            font-weight: 700;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(187, 134, 252, 0.3);
+            filter: brightness(1.1);
+        }
+
+        button:active { transform: translateY(0); }
+
+        .status {
+            text-align: center;
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Avelan</h1>
+        <div class="status" id="status">Lade System...</div>
+    </header>
+    
+    <div class="translator-grid">
+        <div class="box">
+            <label>Deutsch</label>
+            <textarea id="input" placeholder="Text eingeben..."></textarea>
+        </div>
+        <div class="box">
+            <label>Avelan</label>
+            <textarea id="output" readonly placeholder="Übersetzung erscheint hier..."></textarea>
+        </div>
+        <div class="controls">
+            <button onclick="translateText()">Übersetzen</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let config = null;
+
+    async function init() {
+        try {
+            const response = await fetch('vocab.json');
+            config = await response.json();
+            document.getElementById('status').innerText = 'System bereit | ' + Object.keys(config.dictionary).length + ' Wörter geladen';
+        } catch (e) {
+            document.getElementById('status').innerText = 'Fehler beim Laden der vocab.json';
+            console.error(e);
+        }
+    }
+
+    function translateText() {
+        if (!config) return;
+        
+        const input = document.getElementById('input').value.toLowerCase();
+        const tokens = input.match(/\w+|[^\w\s]/g);
+        if (!tokens) {
+            document.getElementById('output').value = "";
+            return;
+        }
+
+        // Globaler Check für Zeitformen im Kontext
+        let sentencePast = config.signals.past.some(sig => tokens.includes(sig));
+        let sentenceFuture = config.signals.future.some(sig => tokens.includes(sig));
+
+        let translated = [];
+
+        for (let i = 0; i < tokens.length; i++) {
+            let token = tokens[i];
+
+            // Satzzeichen erhalten
+            if (/^[^\w\s]$/.test(token)) {
+                translated.push(token);
+                continue;
+            }
+
+            // Artikel ignorieren
+            if (config.rules.ignore_articles.includes(token)) continue;
+
+            // Signalwörter ignorieren (sie haben ihren Zweck erfüllt)
+            if (config.signals.past.includes(token) || config.signals.future.includes(token)) continue;
+
+            let root = token;
+            let isPlural = false;
+
+            // Plural-Detektion (Heuristik für Deutsch)
+            if (token.length > 3) {
+                if (token.endsWith('en') || token.endsWith('er') || token.endsWith('e')) {
+                    // Prüfen ob Stamm ohne Endung im Dict ist
+                    let possibleStems = [token.slice(0, -2), token.slice(0, -1)];
+                    for (let s of possibleStems) {
+                        if (config.dictionary[s] && config.dictionary[s].t === 'n') {
+                            root = s;
+                            isPlural = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            let entry = config.dictionary[root];
+            if (entry) {
+                let word = entry.v;
+
+                // Verben: Zeitformen anwenden
+                if (entry.t === 'v') {
+                    if (sentencePast) word = config.rules.past_prefix + word;
+                    else if (sentenceFuture) word = config.rules.future_prefix + word;
+                }
+
+                // Nomen: Plural anwenden
+                if (isPlural && entry.t === 'n') {
+                    word += config.rules.plural_suffix;
+                }
+
+                translated.push(word);
+            } else {
+                // Unbekanntes Wort bleibt stehen
+                translated.push(token);
+            }
+        }
+
+        // Leerzeichen korrigieren
+        let output = translated.join(' ')
+            .replace(/\s([,.!?;:])/g, '$1')
+            .replace(/^\w/, c => c.toUpperCase());
+
+        document.getElementById('output').value = output;
+    }
+
+    window.onload = init;
+</script>
+
+</body>
+</html>
