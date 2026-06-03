@@ -595,13 +595,12 @@
   // ── Lookup indexes ───────────────────────────────────────
   // Built once after the vocabulary loads. Sets give O(1) membership tests on
   // the large word lists; lowerToKey/lowerRank back the fuzzy spell-matcher.
-  let verbSet = null, ignoreSet = null, nounSet = null;
+  let verbSet = null, ignoreSet = null;
   let lowerToKey = null, lowerRank = null;
 
   function buildIndexes() {
     verbSet   = new Set(vocab.verbs);
     ignoreSet = new Set(vocab.ignore);
-    nounSet   = new Set(vocab.nouns);
     lowerToKey = new Map();
     lowerRank  = new Map();
     let i = 0;
@@ -705,26 +704,6 @@
     return 'neutral';
   }
 
-  // ── Plural heuristic ─────────────────────────────────────
-  // For a capitalized token: strip common German plural endings, check if the
-  // resulting base is a known noun in the dictionary. If so → plural.
-  // Returns the Avelan translation with the plural suffix, or null.
-  const PLURAL_ENDINGS = ['en', 'er', 'e', 'n', 's'];
-
-  function tryPlural(token) {
-    if (!token || !/[A-ZÄÖÜ]/.test(token[0])) return null;
-    for (const ending of PLURAL_ENDINGS) {
-      if (token.length <= ending.length + 1) continue;
-      if (!token.endsWith(ending)) continue;
-      const base = token.slice(0, -ending.length);
-      if (vocab.dictionary[base] && nounSet.has(base)) {
-        const suffix = vocab.rules.plural_suffix.replace(/^-/, ''); // strip leading '-'
-        return vocab.dictionary[base] + suffix;
-      }
-    }
-    return null;
-  }
-
   // ── Single-token translation ─────────────────────────────
   // Returns:
   //   null          → article (ignore + skip following whitespace)
@@ -743,14 +722,15 @@
       return av;
     }
 
-    // ③ Capitalized word → noun path
-    if (/[A-ZÄÖÜ]/.test(token[0])) {
-      if (vocab.dictionary[token])  return vocab.dictionary[token];   // singular
-      const plural = tryPlural(token);
-      if (plural) return plural;                                        // plural
+    // ③ Capitalized word → exact dictionary entry (noun singular & plural,
+    //    e.g. "Haus"→kalor, "Häuser"→kaloren — all plurals are real entries).
+    if (/[A-ZÄÖÜ]/.test(token[0]) && vocab.dictionary[token]) {
+      return vocab.dictionary[token];
     }
 
-    // ④ Everything else → lowercase dictionary lookup
+    // ④ Explicit lowercase entry — lemmas + every inflected form. Checked
+    //    before any heuristic so e.g. "Schlafe"→"schlafe"→slomban (a real
+    //    word) instead of being mis-read as a plural of the noun "Schlaf".
     if (vocab.dictionary[lower]) return vocab.dictionary[lower];
 
     // ⑤ Unknown → tolerate a few spelling mistakes, then re-translate
