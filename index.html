@@ -595,12 +595,13 @@
   // ── Lookup indexes ───────────────────────────────────────
   // Built once after the vocabulary loads. Sets give O(1) membership tests on
   // the large word lists; lowerToKey/lowerRank back the fuzzy spell-matcher.
-  let verbSet = null, ignoreSet = null;
+  let verbSet = null, ignoreSet = null, nameSet = null;
   let lowerToKey = null, lowerRank = null;
 
   function buildIndexes() {
     verbSet   = new Set(vocab.verbs);
     ignoreSet = new Set(vocab.ignore);
+    nameSet   = new Set((vocab.names || []).map(n => n.toLowerCase()));
     lowerToKey = new Map();
     lowerRank  = new Map();
     let i = 0;
@@ -713,6 +714,12 @@
 
     // ① Article → remove
     if (ignoreSet.has(lower)) return null;
+
+    // ①a Proper name → keep unchanged. Checked before the dictionary so names
+    //     that collide with a German word (e.g. "Mark", "Frank") stay as the
+    //     name. Only capitalized tokens count as names; a lowercase "mark"
+    //     still translates as the common noun.
+    if (/[A-ZÄÖÜ]/.test(token[0]) && nameSet.has(lower)) return token;
 
     // ② Verb infinitive → translate + optional tense prefix
     if (verbSet.has(lower)) {
