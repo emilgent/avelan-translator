@@ -209,13 +209,21 @@
     }
 
     .swap-btn {
-      font-size: 1.1rem;
-      padding: 6px 14px;
+      font-size: 1.35rem;
+      line-height: 1;
+      padding: 10px 16px;
       border-radius: 50px;
-      transition: all 0.2s;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      background: var(--accent-glow);
+      justify-content: center;
+      transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
     }
     .swap-btn:hover {
       transform: rotate(180deg);
+      color: #fff;
+      background: var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow);
     }
 
     #translate-btn {
