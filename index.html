@@ -616,7 +616,8 @@
   // the large word lists; lowerToKey/lowerRank back the fuzzy spell-matcher.
   let verbSet = null, ignoreSet = null, nameSet = null;
   let lowerToKey = null, lowerRank = null;
-  let reverseDict = null;   // avelan-word → german-key (first/canonical hit)
+  let reverseDict = null;      // avelan → best German finite/present form
+  let reverseLemmaDict = null;  // avelan → infinitive (for tense-prefixed lookups)
 
   function buildIndexes() {
     verbSet   = new Set(vocab.verbs);
@@ -624,14 +625,53 @@
     nameSet   = new Set((vocab.names || []).map(n => n.toLowerCase()));
     lowerToKey = new Map();
     lowerRank  = new Map();
-    reverseDict = new Map();
+
+    // Group all German keys by their Avelan value
+    const avGroups = new Map();
     let i = 0;
     for (const key in vocab.dictionary) {
       const lk = key.toLowerCase();
       if (!lowerToKey.has(lk)) { lowerToKey.set(lk, key); lowerRank.set(lk, i); }
       const av = vocab.dictionary[key];
-      if (av && !reverseDict.has(av)) reverseDict.set(av, key);
+      if (av) {
+        if (!avGroups.has(av)) avGroups.set(av, []);
+        avGroups.get(av).push(key);
+      }
       i++;
+    }
+
+    // Build two reverse dictionaries:
+    // reverseDict      — prefer 3rd-person-singular present ("ist", "geht", "macht")
+    // reverseLemmaDict — prefer infinitive ("sein", "gehen", "machen")
+    reverseDict = new Map();
+    reverseLemmaDict = new Map();
+
+    for (const [av, keys] of avGroups) {
+      const infinitive = keys.find(k => verbSet.has(k.toLowerCase()));
+
+      if (infinitive) {
+        reverseLemmaDict.set(av, infinitive);
+
+        // Among non-infinitive forms ending in 't' (typical 3sg present),
+        // pick shortest; break ties by dictionary insertion order.
+        const nonInf = keys.filter(k => k.toLowerCase() !== infinitive.toLowerCase());
+        const endsInT = nonInf.filter(k => k.endsWith('t'));
+
+        if (endsInT.length > 0) {
+          endsInT.sort((a, b) => {
+            if (a.length !== b.length) return a.length - b.length;
+            return keys.indexOf(a) - keys.indexOf(b);
+          });
+          reverseDict.set(av, endsInT[0]);
+        } else {
+          reverseDict.set(av, infinitive);
+        }
+      } else {
+        // Non-verb group: prefer shortest key (base form)
+        keys.sort((a, b) => a.length - b.length);
+        reverseDict.set(av, keys[0]);
+        reverseLemmaDict.set(av, keys[0]);
+      }
     }
   }
 
@@ -783,27 +823,31 @@
   }
 
   // ── Reverse (Avelan → German) single-token translation ──
-  // Strips tense prefixes (ba- / fi-), looks up in reverseDict.
+  // Strips tense prefixes (ba- / fi-), looks up in reverseDict / reverseLemmaDict.
   const AV_TOKEN_RE = /[a-zA-Z\-]+|[^a-zA-Z\-]+/g;
 
   function translateTokenReverse(token) {
     let word = token;
     let prefix = '';
 
-    // Strip tense prefix
-    if (word.startsWith('ba-')) { prefix = 'ba-'; word = word.slice(3); }
-    else if (word.startsWith('fi-')) { prefix = 'fi-'; word = word.slice(3); }
+    const wl = word.toLowerCase();
+    if (wl.startsWith('ba-')) { prefix = 'ba-'; word = word.slice(3); }
+    else if (wl.startsWith('fi-')) { prefix = 'fi-'; word = word.slice(3); }
 
-    // Direct lookup
-    const de = reverseDict.get(word);
+    const isCapitalized = word[0] !== word[0].toLowerCase();
+    const lookupKey = word.toLowerCase();
+
+    // Use lemma dict for tense-prefixed tokens, finite dict otherwise
+    const dict = prefix ? reverseLemmaDict : reverseDict;
+    let de = dict.get(lookupKey) || dict.get(word);
+
     if (de) {
-      // Re-add tense context as indicator word
+      if (isCapitalized) de = de.charAt(0).toUpperCase() + de.slice(1);
       if (prefix === 'ba-') return de + ' (Vergangenheit)';
       if (prefix === 'fi-') return de + ' (Zukunft)';
       return de;
     }
 
-    // Unknown → keep original (including prefix)
     return token;
   }
 
@@ -871,8 +915,9 @@
           out.push(token);
         }
       }
-      const translated = out.join('').replace(/\s{2,}/g, ' ').trim();
-      // Clean up repeated tense annotations
+      let translated = out.join('').replace(/\s{2,}/g, ' ').trim();
+      // Capitalize first letter of German output (sentence start)
+      if (translated) translated = translated.charAt(0).toUpperCase() + translated.slice(1);
       outputEl.value = translated;
       updateOutCount(translated);
     }
