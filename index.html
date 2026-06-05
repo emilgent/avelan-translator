@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Avelan Übersetzer — Deutsch → Avelan</title>
+  <title>Avelan Übersetzer — Deutsch ↔ Avelan</title>
   <style>
     *, *::before, *::after {
       margin: 0;
@@ -206,6 +206,16 @@
       font-size: 1.3rem;
       color: var(--text-dim);
       transition: color 0.2s;
+    }
+
+    .swap-btn {
+      font-size: 1.1rem;
+      padding: 6px 14px;
+      border-radius: 50px;
+      transition: all 0.2s;
+    }
+    .swap-btn:hover {
+      transform: rotate(180deg);
     }
 
     #translate-btn {
@@ -454,17 +464,17 @@
   <!-- ── Translator ── -->
   <div class="translator-grid">
 
-    <!-- German input panel -->
+    <!-- Input panel -->
     <div class="panel">
       <div class="panel-header">
         <div class="lang-tag">
-          <span class="lang-flag">🇩🇪</span>
-          <span class="lang-label">Deutsch</span>
+          <span class="lang-flag" id="input-flag">🇩🇪</span>
+          <span class="lang-label" id="input-label">Deutsch</span>
         </div>
         <button class="btn-icon" onclick="clearAll()">✕&nbsp;Leeren</button>
       </div>
       <textarea
-        id="german-input"
+        id="input-area"
         placeholder="Deutschen Text hier eingeben…"
         spellcheck="true"
         oninput="onInputChange()"
@@ -477,7 +487,8 @@
 
     <!-- Center controls -->
     <div class="controls">
-      <div class="arrow-sep">→</div>
+      <button class="btn-icon swap-btn" id="swap-btn" onclick="swapDirection()" title="Richtung wechseln">⇄</button>
+      <div class="arrow-sep" id="arrow-sep">→</div>
 
       <button id="translate-btn" onclick="translateText()" disabled>
         Übersetzen
@@ -490,17 +501,17 @@
       </div>
     </div>
 
-    <!-- Avelan output panel -->
+    <!-- Output panel -->
     <div class="panel">
       <div class="panel-header">
         <div class="lang-tag">
-          <span class="lang-flag">🌐</span>
-          <span class="lang-label">Avelan</span>
+          <span class="lang-flag" id="output-flag">🌐</span>
+          <span class="lang-label" id="output-label">Avelan</span>
         </div>
         <button class="btn-icon" onclick="copyOutput()">⎘&nbsp;Kopieren</button>
       </div>
       <textarea
-        id="avelan-output"
+        id="output-area"
         placeholder="Avelan-Übersetzung erscheint hier…"
         readonly
       ></textarea>
@@ -597,6 +608,7 @@
   // the large word lists; lowerToKey/lowerRank back the fuzzy spell-matcher.
   let verbSet = null, ignoreSet = null, nameSet = null;
   let lowerToKey = null, lowerRank = null;
+  let reverseDict = null;   // avelan-word → german-key (first/canonical hit)
 
   function buildIndexes() {
     verbSet   = new Set(vocab.verbs);
@@ -604,10 +616,13 @@
     nameSet   = new Set((vocab.names || []).map(n => n.toLowerCase()));
     lowerToKey = new Map();
     lowerRank  = new Map();
+    reverseDict = new Map();
     let i = 0;
     for (const key in vocab.dictionary) {
       const lk = key.toLowerCase();
       if (!lowerToKey.has(lk)) { lowerToKey.set(lk, key); lowerRank.set(lk, i); }
+      const av = vocab.dictionary[key];
+      if (av && !reverseDict.has(av)) reverseDict.set(av, key);
       i++;
     }
   }
@@ -759,55 +774,100 @@
     return token;
   }
 
+  // ── Reverse (Avelan → German) single-token translation ──
+  // Strips tense prefixes (ba- / fi-), looks up in reverseDict.
+  const AV_TOKEN_RE = /[a-zA-Z\-]+|[^a-zA-Z\-]+/g;
+
+  function translateTokenReverse(token) {
+    let word = token;
+    let prefix = '';
+
+    // Strip tense prefix
+    if (word.startsWith('ba-')) { prefix = 'ba-'; word = word.slice(3); }
+    else if (word.startsWith('fi-')) { prefix = 'fi-'; word = word.slice(3); }
+
+    // Direct lookup
+    const de = reverseDict.get(word);
+    if (de) {
+      // Re-add tense context as indicator word
+      if (prefix === 'ba-') return de + ' (Vergangenheit)';
+      if (prefix === 'fi-') return de + ' (Zukunft)';
+      return de;
+    }
+
+    // Unknown → keep original (including prefix)
+    return token;
+  }
+
+  // ── Direction state ────────────────────────────────────────
+  let direction = 'de-av';  // 'de-av' or 'av-de'
+
   // ── Main translation ─────────────────────────────────────
   function translateText() {
     if (!vocab) return;
 
-    const input = document.getElementById('german-input').value;
+    const inputEl  = document.getElementById('input-area');
+    const outputEl = document.getElementById('output-area');
+    const input = inputEl.value;
     if (!input.trim()) {
-      document.getElementById('avelan-output').value = '';
+      outputEl.value = '';
       updateOutCount('');
       return;
     }
 
-    // Detect tense from full sentence
-    const tense = detectTense(input);
-    updateTenseBadge(tense);
+    if (direction === 'de-av') {
+      // German → Avelan (original logic)
+      const tense = detectTense(input);
+      updateTenseBadge(tense);
 
-    const tokens = tokenize(input);
-    const out = [];
-    let skipNextWhitespace = false;
+      const tokens = tokenize(input);
+      const out = [];
+      let skipNextWhitespace = false;
 
-    for (const token of tokens) {
-      const isLetters = /[a-zA-ZäöüÄÖÜß]/.test(token);
+      for (const token of tokens) {
+        const isLetters = /[a-zA-ZäöüÄÖÜß]/.test(token);
 
-      if (!isLetters) {
-        // Non-letter run: spaces / punctuation
-        if (skipNextWhitespace && /^\s+$/.test(token)) {
-          // Drop whitespace that directly follows a removed article
+        if (!isLetters) {
+          if (skipNextWhitespace && /^\s+$/.test(token)) {
+            skipNextWhitespace = false;
+            continue;
+          }
           skipNextWhitespace = false;
+          out.push(token);
           continue;
         }
+
         skipNextWhitespace = false;
-        out.push(token);
-        continue;
+        const result = translateToken(token, tense);
+
+        if (result === null) {
+          skipNextWhitespace = true;
+          continue;
+        }
+
+        out.push(result);
       }
 
-      skipNextWhitespace = false;
-      const result = translateToken(token, tense);
-
-      if (result === null) {
-        // Article removed; tell the loop to swallow the next whitespace
-        skipNextWhitespace = true;
-        continue;
+      const translated = out.join('').replace(/\s{2,}/g, ' ').trim();
+      outputEl.value = translated;
+      updateOutCount(translated);
+    } else {
+      // Avelan → German
+      updateTenseBadge('neutral');
+      const tokens = input.match(AV_TOKEN_RE) || [];
+      const out = [];
+      for (const token of tokens) {
+        if (/[a-zA-Z]/.test(token)) {
+          out.push(translateTokenReverse(token));
+        } else {
+          out.push(token);
+        }
       }
-
-      out.push(result);
+      const translated = out.join('').replace(/\s{2,}/g, ' ').trim();
+      // Clean up repeated tense annotations
+      outputEl.value = translated;
+      updateOutCount(translated);
     }
-
-    const translated = out.join('').replace(/\s{2,}/g, ' ').trim();
-    document.getElementById('avelan-output').value = translated;
-    updateOutCount(translated);
   }
 
   // ── UI helpers ───────────────────────────────────────
@@ -823,7 +883,7 @@
   }
 
   function onInputChange() {
-    const txt = document.getElementById('german-input').value;
+    const txt = document.getElementById('input-area').value;
     const n   = wordCount(txt);
     document.getElementById('in-word-count').textContent =
       n + ' Wort' + (n !== 1 ? 'e' : '');
@@ -835,17 +895,47 @@
       n + ' Wort' + (n !== 1 ? 'e' : '');
   }
 
+  function swapDirection() {
+    direction = direction === 'de-av' ? 'av-de' : 'de-av';
+    const inFlag  = document.getElementById('input-flag');
+    const inLabel = document.getElementById('input-label');
+    const outFlag = document.getElementById('output-flag');
+    const outLabel= document.getElementById('output-label');
+    const arrow   = document.getElementById('arrow-sep');
+    const inputEl = document.getElementById('input-area');
+
+    if (direction === 'de-av') {
+      inFlag.textContent  = '🇩🇪'; inLabel.textContent  = 'Deutsch';
+      outFlag.textContent = '🌐'; outLabel.textContent = 'Avelan';
+      inputEl.placeholder = 'Deutschen Text hier eingeben…';
+      document.getElementById('output-area').placeholder = 'Avelan-Übersetzung erscheint hier…';
+    } else {
+      inFlag.textContent  = '🌐'; inLabel.textContent  = 'Avelan';
+      outFlag.textContent = '🇩🇪'; outLabel.textContent = 'Deutsch';
+      inputEl.placeholder = 'Avelan-Text hier eingeben…';
+      document.getElementById('output-area').placeholder = 'Deutsche Übersetzung erscheint hier…';
+    }
+    arrow.textContent = '→';
+
+    // Clear and re-translate if there's input
+    document.getElementById('output-area').value = '';
+    updateOutCount('');
+    const cur = inputEl.value.trim();
+    if (cur) translateText();
+    inputEl.focus();
+  }
+
   function clearAll() {
-    document.getElementById('german-input').value  = '';
-    document.getElementById('avelan-output').value = '';
+    document.getElementById('input-area').value  = '';
+    document.getElementById('output-area').value = '';
     onInputChange();
     updateOutCount('');
     updateTenseBadge('neutral');
-    document.getElementById('german-input').focus();
+    document.getElementById('input-area').focus();
   }
 
   async function copyOutput() {
-    const txt = document.getElementById('avelan-output').value;
+    const txt = document.getElementById('output-area').value;
     if (!txt) { showToast('⚠ Nichts zum Kopieren.'); return; }
     try {
       await navigator.clipboard.writeText(txt);
@@ -860,7 +950,7 @@
     const clone = chip.cloneNode(true);
     clone.querySelector('.chip-tag')?.remove();
     const txt = clone.textContent.trim();
-    document.getElementById('german-input').value = txt;
+    document.getElementById('input-area').value = txt;
     onInputChange();
     translateText();
   }
